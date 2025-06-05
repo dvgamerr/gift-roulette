@@ -123,9 +123,11 @@ import HistoryList from './HistoryList.astro';
     const pastelColor = getRandomPastelColor();
     nameDisplay.style.backgroundColor = pastelColor;
     nameDisplay.textContent = name;
+    nameDisplay.classList.remove("opacity-0");
     nameDisplay.classList.add("opacity-100");
     setTimeout(() => {
       nameDisplay.classList.remove("opacity-100");
+      nameDisplay.classList.add("opacity-0");
     }, 1500);
   }
 
