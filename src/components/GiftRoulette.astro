@@ -47,33 +47,34 @@ import HistoryList from './HistoryList.astro';
   let firstGifter = null;
   let currentGifter = null;
 
-  function getClipPath(angleSlice) {
+  const getClipPath = (angleSlice) => {
     if (angleSlice >= 360) return "none";
     const rad = (angleSlice / 2) * (Math.PI / 180);
     const x1 = 50 + 50 * Math.sin(rad);
     const y1 = 50 - 50 * Math.cos(rad);
     const x2 = 50 - 50 * Math.sin(rad);
     return `polygon(50% 50%, ${x1}% ${y1}%, ${x2}% ${y1}%)`;
-  }
+  };
 
-  function updateWheel() {
+  const updateWheel = () => {
     const wheel = document.getElementById("wheel");
     wheel.innerHTML = "";
     const numSegments = friends.length;
     if (numSegments === 0) return;
     const angleSlice = 360 / numSegments;
     const clip = getClipPath(angleSlice);
-    friends.forEach((friend, index) => {
+    
+    for (const [index, friend] of friends.entries()) {
       const segment = document.createElement("div");
       segment.classList.add("wheel-segment", "odd:bg-gray-300", "even:bg-gray-200");
       segment.style.transform = `rotate(${index * angleSlice}deg)`;
       segment.style.clipPath = clip;
       segment.textContent = friend;
       wheel.appendChild(segment);
-    });
-  }
+    }
+  };
 
-  function addFriend() {
+  const addFriend = () => {
     const newFriendInput = document.getElementById("newFriend");
     const friendName = newFriendInput.value.trim();
     if (friendName && !friends.includes(friendName)) {
@@ -82,18 +83,19 @@ import HistoryList from './HistoryList.astro';
       updateFriendsList();
       updateWheel();
     }
-  }
+  };
 
-  function removeFriend(index) {
+  const removeFriend = (index) => {
     friends.splice(index, 1);
     updateFriendsList();
     updateWheel();
-  }
+  };
 
-  function updateFriendsList() {
+  const updateFriendsList = () => {
     const friendsList = document.getElementById("friendsList");
     friendsList.innerHTML = "";
-    friends.forEach((friend, index) => {
+    
+    for (const [index, friend] of friends.entries()) {
       const listItem = document.createElement("li");
       listItem.classList.add("flex", "justify-between", "items-center", "py-1", "border-b", "border-gray-200", "last:border-b-0");
       listItem.textContent = friend;
@@ -103,10 +105,10 @@ import HistoryList from './HistoryList.astro';
       removeButton.onclick = () => removeFriend(index);
       listItem.appendChild(removeButton);
       friendsList.appendChild(listItem);
-    });
-  }
+    }
+  };
 
-  function spinWheel() {
+  const spinWheel = () => {
     if (spinning || friends.length === 0) return;
     spinning = true;
     const wheel = document.getElementById("wheel");
@@ -121,28 +123,28 @@ import HistoryList from './HistoryList.astro';
       showWinner(rand);
       spinning = false;
     }, 2000);
-  }
+  };
 
-  function showWinner(winnerIndex) {
-    const winnerName = friends[winnerIndex];
-    displayWinnerName(winnerName);
-    processWinner(winnerIndex);
-  }
+  // const showWinner = (winnerIndex) => {
+  //   const winnerName = friends[winnerIndex];
+  //   displayWinnerName(winnerName);
+  //   processWinner(winnerIndex);
+  // };
 
-  function displayWinnerName(name) {
-    const nameDisplay = document.getElementById("nameDisplay");
-    const pastelColor = getRandomPastelColor();
-    nameDisplay.style.backgroundColor = pastelColor;
-    nameDisplay.textContent = name;
-    nameDisplay.classList.remove("opacity-0");
-    nameDisplay.classList.add("opacity-100");
-    setTimeout(() => {
-      nameDisplay.classList.remove("opacity-100");
-      nameDisplay.classList.add("opacity-0");
-    }, 1500);
-  }
+  // const displayWinnerName = (name) => {
+  //   const nameDisplay = document.getElementById("nameDisplay");
+  //   const pastelColor = getRandomPastelColor();
+  //   nameDisplay.style.backgroundColor = pastelColor;
+  //   nameDisplay.textContent = name;
+  //   nameDisplay.classList.remove("opacity-0");
+  //   nameDisplay.classList.add("opacity-100");
+  //   setTimeout(() => {
+  //     nameDisplay.classList.remove("opacity-100");
+  //     nameDisplay.classList.add("opacity-0");
+  //   }, 1500);
+  // };
 
-  function processWinner(index) {
+  const processWinner = (index) => {
     const name = friends[index];
     if (currentGifter === null) {
       firstGifter = name;
@@ -171,31 +173,32 @@ import HistoryList from './HistoryList.astro';
         nameDisplay.style.backgroundColor = "";
       }, 2000);
     }
-  }
+  };
 
-  function updateGiftHistory() {
+  const updateGiftHistory = () => {
     const historyList = document.getElementById("giftHistory");
     historyList.innerHTML = "";
-    giftHistory.forEach((item) => {
+    
+    for (const item of giftHistory) {
       const historyItem = document.createElement("li");
       historyItem.classList.add("py-1", "border-b", "border-gray-200", "last:border-b-0");
       historyItem.textContent = `${item.gifter} gave to ${item.receiver}`;
       historyList.appendChild(historyItem);
-    });
-  }
+    }
+  };
 
-  function getRandomPastelColor() {
+  const getRandomPastelColor = () => {
     const h = 360 * Math.random();
     const s = 25 + 70 * Math.random() + "%";
     const l = 75 + 10 * Math.random() + "%";
     return `hsl(${h},${s},${l})`;
-  }
+  };
 
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById("spinButton").addEventListener("click", spinWheel);
     document.getElementById("addFriendButton").addEventListener("click", addFriend);
 
-    document.getElementById("newFriend").addEventListener("keydown", function (event) {
+    document.getElementById("newFriend").addEventListener("keydown", (event) => {
       if (event.key === "Enter") addFriend();
     });
 
