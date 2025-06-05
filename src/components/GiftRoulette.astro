@@ -134,16 +134,17 @@ import HistoryList from './HistoryList.astro';
   function animateNameDeletion(winnerIndex) {
     if (friends.length <= 1) return;
 
-    const winnerName = friends[winnerIndex];
+    const gifterName = friends[winnerIndex];
     const remainingFriends = [...friends];
     remainingFriends.splice(winnerIndex, 1);
-    const gifterIndex = Math.floor(Math.random() * remainingFriends.length);
-    const gifterName = remainingFriends[gifterIndex];
+    const receiverIndex = Math.floor(Math.random() * remainingFriends.length);
+    const receiverName = remainingFriends[receiverIndex];
 
-    giftHistory.push({ gifter: gifterName, receiver: winnerName });
+    giftHistory.push({ gifter: gifterName, receiver: receiverName });
     updateGiftHistory();
 
-    friends.splice(winnerIndex, 1);
+    const removeIndex = friends.indexOf(receiverName);
+    if (removeIndex !== -1) friends.splice(removeIndex, 1);
     updateFriendsList();
     updateWheel();
 
