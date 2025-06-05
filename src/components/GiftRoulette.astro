@@ -18,7 +18,6 @@ import HistoryList from './HistoryList.astro';
   left: 0;
   width: 100%;
   height: 100%;
-  clip-path: polygon(50% 50%, 50% 0, 100% 50%);
   transform-origin: 50% 50%;
   display: flex;
   justify-content: center;
@@ -45,6 +44,17 @@ import HistoryList from './HistoryList.astro';
   const friends = [];
   const giftHistory = [];
   let spinning = false;
+  let firstGifter = null;
+  let currentGifter = null;
+
+  function getClipPath(angleSlice) {
+    if (angleSlice >= 360) return "none";
+    const rad = (angleSlice / 2) * (Math.PI / 180);
+    const x1 = 50 + 50 * Math.sin(rad);
+    const y1 = 50 - 50 * Math.cos(rad);
+    const x2 = 50 - 50 * Math.sin(rad);
+    return `polygon(50% 50%, ${x1}% ${y1}%, ${x2}% ${y1}%)`;
+  }
 
   function updateWheel() {
     const wheel = document.getElementById("wheel");
@@ -52,11 +62,12 @@ import HistoryList from './HistoryList.astro';
     const numSegments = friends.length;
     if (numSegments === 0) return;
     const angleSlice = 360 / numSegments;
+    const clip = getClipPath(angleSlice);
     friends.forEach((friend, index) => {
       const segment = document.createElement("div");
       segment.classList.add("wheel-segment", "odd:bg-gray-300", "even:bg-gray-200");
       segment.style.transform = `rotate(${index * angleSlice}deg)`;
-      segment.style.clipPath = `polygon(50% 50%, 50% 0, ${50 + 50 * Math.tan(((angleSlice / 2) * Math.PI) / 180)}% 0)`;
+      segment.style.clipPath = clip;
       segment.textContent = friend;
       wheel.appendChild(segment);
     });
@@ -96,7 +107,7 @@ import HistoryList from './HistoryList.astro';
   }
 
   function spinWheel() {
-    if (spinning || friends.length < 2) return;
+    if (spinning || friends.length === 0) return;
     spinning = true;
     const wheel = document.getElementById("wheel");
     wheel.classList.add("spinning");
@@ -115,7 +126,7 @@ import HistoryList from './HistoryList.astro';
   function showWinner(winnerIndex) {
     const winnerName = friends[winnerIndex];
     displayWinnerName(winnerName);
-    animateNameDeletion(winnerIndex);
+    processWinner(winnerIndex);
   }
 
   function displayWinnerName(name) {
@@ -131,28 +142,35 @@ import HistoryList from './HistoryList.astro';
     }, 1500);
   }
 
-  function animateNameDeletion(winnerIndex) {
-    if (friends.length <= 1) return;
+  function processWinner(index) {
+    const name = friends[index];
+    if (currentGifter === null) {
+      firstGifter = name;
+      currentGifter = name;
+      friends.splice(index, 1);
+      updateFriendsList();
+      updateWheel();
+    } else {
+      const receiverName = name;
+      giftHistory.push({ gifter: currentGifter, receiver: receiverName });
+      updateGiftHistory();
+      friends.splice(index, 1);
+      if (friends.length === 0) {
+        giftHistory.push({ gifter: receiverName, receiver: firstGifter });
+        updateGiftHistory();
+        currentGifter = null;
+      } else {
+        currentGifter = receiverName;
+      }
+      updateFriendsList();
+      updateWheel();
 
-    const gifterName = friends[winnerIndex];
-    const remainingFriends = [...friends];
-    remainingFriends.splice(winnerIndex, 1);
-    const receiverIndex = Math.floor(Math.random() * remainingFriends.length);
-    const receiverName = remainingFriends[receiverIndex];
-
-    giftHistory.push({ gifter: gifterName, receiver: receiverName });
-    updateGiftHistory();
-
-    const removeIndex = friends.indexOf(receiverName);
-    if (removeIndex !== -1) friends.splice(removeIndex, 1);
-    updateFriendsList();
-    updateWheel();
-
-    setTimeout(() => {
-      const nameDisplay = document.getElementById("nameDisplay");
-      nameDisplay.textContent = "";
-      nameDisplay.style.backgroundColor = "";
-    }, 2000);
+      setTimeout(() => {
+        const nameDisplay = document.getElementById("nameDisplay");
+        nameDisplay.textContent = "";
+        nameDisplay.style.backgroundColor = "";
+      }, 2000);
+    }
   }
 
   function updateGiftHistory() {
