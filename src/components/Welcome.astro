@@ -19,9 +19,9 @@
 					class="add-friend-input"
 					placeholder="Enter friend's name"
 				/>
-				<button class="add-friend-button" onclick="addFriend()" onenter>
-					Add
-				</button>
+                                <button class="add-friend-button" onclick="addFriend()">
+                                        Add
+                                </button>
 			</div>
 			<ul id="friendsList"></ul>
 		</div>
@@ -215,3 +215,145 @@
 		}
 	}
 </style>
+
+<script>
+  const friends = [];
+  const giftHistory = [];
+  let spinning = false;
+
+  function updateWheel() {
+    const wheel = document.getElementById("wheel");
+    wheel.innerHTML = "";
+    const numSegments = friends.length;
+    if (numSegments === 0) return;
+    const angleSlice = 360 / numSegments;
+    friends.forEach((friend, index) => {
+      const segment = document.createElement("div");
+      segment.classList.add("wheel-segment");
+      segment.style.transform = `rotate(${index * angleSlice}deg)`;
+      segment.style.clipPath = `polygon(50% 50%, 50% 0, ${
+        50 + 50 * Math.tan(((angleSlice / 2) * Math.PI) / 180)
+      }% 0)`;
+      segment.textContent = friend;
+      wheel.appendChild(segment);
+    });
+  }
+
+  function addFriend() {
+    const newFriendInput = document.getElementById("newFriend");
+    const friendName = newFriendInput.value.trim();
+    if (friendName && !friends.includes(friendName)) {
+      friends.push(friendName);
+      newFriendInput.value = "";
+      updateFriendsList();
+      updateWheel();
+    }
+  }
+
+  function removeFriend(index) {
+    friends.splice(index, 1);
+    updateFriendsList();
+    updateWheel();
+  }
+
+  function updateFriendsList() {
+    const friendsList = document.getElementById("friendsList");
+    friendsList.innerHTML = "";
+    friends.forEach((friend, index) => {
+      const listItem = document.createElement("li");
+      listItem.classList.add("friend-item");
+      listItem.textContent = friend;
+      const removeButton = document.createElement("button");
+      removeButton.classList.add("remove-friend-button");
+      removeButton.textContent = "x";
+      removeButton.onclick = () => removeFriend(index);
+      listItem.appendChild(removeButton);
+      friendsList.appendChild(listItem);
+    });
+  }
+
+  function spinWheel() {
+    if (spinning || friends.length < 2) return;
+    spinning = true;
+    const wheel = document.getElementById("wheel");
+    wheel.classList.add("spinning");
+    const rand = Math.floor(Math.random() * friends.length);
+    const deg = 360 * 5 + rand * (360 / friends.length);
+    wheel.style.transform = `rotate(${deg}deg)`;
+
+    setTimeout(() => {
+      wheel.classList.remove("spinning");
+      wheel.style.transform = `rotate(${deg % 360}deg)`;
+      showWinner(rand);
+      spinning = false;
+    }, 2000);
+  }
+
+  function showWinner(winnerIndex) {
+    const winnerName = friends[winnerIndex];
+    displayWinnerName(winnerName);
+    animateNameDeletion(winnerIndex);
+  }
+
+  function displayWinnerName(name) {
+    const nameDisplay = document.getElementById("nameDisplay");
+    const pastelColor = getRandomPastelColor();
+    nameDisplay.style.backgroundColor = pastelColor;
+    nameDisplay.textContent = name;
+    nameDisplay.classList.add("show");
+    setTimeout(() => {
+      nameDisplay.classList.remove("show");
+    }, 1500);
+  }
+
+  function animateNameDeletion(winnerIndex) {
+    if (friends.length <= 1) return;
+
+    const winnerName = friends[winnerIndex];
+    const remainingFriends = [...friends];
+    remainingFriends.splice(winnerIndex, 1);
+    const gifterIndex = Math.floor(Math.random() * remainingFriends.length);
+    const gifterName = remainingFriends[gifterIndex];
+
+    giftHistory.push({ gifter: gifterName, receiver: winnerName });
+    updateGiftHistory();
+
+    friends.splice(winnerIndex, 1);
+    updateFriendsList();
+    updateWheel();
+
+    // Reset the displayed name after animation delay
+    setTimeout(() => {
+      const nameDisplay = document.getElementById("nameDisplay");
+      nameDisplay.textContent = "";
+      nameDisplay.style.backgroundColor = "";
+    }, 2000);
+  }
+
+  function updateGiftHistory() {
+    const historyList = document.getElementById("giftHistory");
+    historyList.innerHTML = "";
+    giftHistory.forEach((item) => {
+      const historyItem = document.createElement("li");
+      historyItem.classList.add("history-item");
+      historyItem.textContent = `${item.gifter} gave to ${item.receiver}`;
+      historyList.appendChild(historyItem);
+    });
+  }
+
+  function getRandomPastelColor() {
+    const h = 360 * Math.random();
+    const s = 25 + 70 * Math.random() + "%";
+    const l = 75 + 10 * Math.random() + "%";
+    return `hsl(${h},${s},${l})`;
+  }
+
+  document
+    .getElementById("newFriend")
+    .addEventListener("keydown", function (event) {
+      if (event.key === "Enter") addFriend();
+    });
+
+  updateFriendsList();
+  updateWheel();
+</script>
