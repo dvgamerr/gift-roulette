@@ -12,83 +12,125 @@ import HistoryList from './HistoryList.astro';
 </div>
 
 <style>
-.wheel-segment {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  transform-origin: 50% 50%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  padding-top: 10px;
-  box-sizing: border-box;
-  font-size: 14px;
-  font-weight: bold;
-  text-align: center;
-  user-select: none;
-}
-.odd\\:bg-gray-300:nth-child(odd){background-color:#d1d5db;}
-.even\\:bg-gray-200:nth-child(even){background-color:#e5e7eb;}
 @keyframes spin {
   from {transform: rotate(0deg);}
   to {transform: rotate(360deg);}
 }
 .spinning {
-  animation: spin 2s steps(100);
+  animation: spin 2s ease-out;
 }
 </style>
 
 <script>
-  const friends = [];
+  // Import canvas-confetti using dynamic import
+  let confetti;
+  import('canvas-confetti').then(module => {
+    confetti = module.default;
+  });
+
+  const friends = ["A","B","C"];
   const giftHistory = [];
   let spinning = false;
   let firstGifter = null;
   let currentGifter = null;
+  let wheelCanvas, wheelCtx;
+  let rotationAngle = 0;
+  let animationId = null;
 
-  const getClipPath = (angleSlice) => {
-    if (angleSlice >= 360) return "none";
-    const rad = (angleSlice / 2) * (Math.PI / 180);
-    const x1 = 50 + 50 * Math.sin(rad);
-    const y1 = 50 - 50 * Math.cos(rad);
-    const x2 = 50 - 50 * Math.sin(rad);
-    return `polygon(50% 50%, ${x1}% ${y1}%, ${x2}% ${y1}%)`;
-  };
+  const colors = ['#d1d5db', '#e5e7eb']; // Gray colors for alternating segments
 
-  const updateWheel = () => {
-    const wheel = document.getElementById("wheel");
-    wheel.innerHTML = "";
+  const drawWheel = () => {
+    if (!wheelCanvas) return;
+    
     const numSegments = friends.length;
     if (numSegments === 0) return;
-    const angleSlice = 360 / numSegments;
-    const clip = getClipPath(angleSlice);
     
-    for (const [index, friend] of friends.entries()) {
-      const segment = document.createElement("div");
-      segment.classList.add("wheel-segment", "odd:bg-gray-300", "even:bg-gray-200");
-      segment.style.transform = `rotate(${index * angleSlice}deg)`;
-      segment.style.clipPath = clip;
-      segment.textContent = friend;
-      wheel.appendChild(segment);
+    const centerX = wheelCanvas.width / 2;
+    const centerY = wheelCanvas.height / 2;
+    const radius = Math.min(centerX, centerY) - 10;
+    const angleSlice = (2 * Math.PI) / numSegments;
+
+    // Clear canvas
+    wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+    
+    // Draw wheel background
+    wheelCtx.save();
+    wheelCtx.translate(centerX, centerY);
+    wheelCtx.rotate(rotationAngle);
+    
+    // Draw segments
+    for (let i = 0; i < numSegments; i++) {
+      const startAngle = i * angleSlice;
+      const endAngle = (i + 1) * angleSlice;
+      
+      // Draw segment
+      wheelCtx.beginPath();
+      wheelCtx.moveTo(0, 0);
+      wheelCtx.arc(0, 0, radius, startAngle, endAngle);
+      wheelCtx.closePath();
+      wheelCtx.fillStyle = colors[i % 2];
+      wheelCtx.fill();
+      wheelCtx.stroke();
+      
+      // Draw name
+      wheelCtx.save();
+      wheelCtx.rotate(startAngle + angleSlice / 2);
+      wheelCtx.textAlign = 'right';
+      wheelCtx.fillStyle = '#000';
+      wheelCtx.font = 'bold 14px Arial';
+      wheelCtx.fillText(friends[i], radius - 20, 5);
+      wheelCtx.restore();
     }
+    
+    // Draw center circle
+    wheelCtx.beginPath();
+    wheelCtx.arc(0, 0, 10, 0, 2 * Math.PI);
+    wheelCtx.fillStyle = '#fff';
+    wheelCtx.fill();
+    wheelCtx.stroke();
+    
+    wheelCtx.restore();
+    
+    // Draw pointer
+    wheelCtx.beginPath();
+    wheelCtx.moveTo(centerX + radius, centerY);
+    wheelCtx.lineTo(centerX + radius + 20, centerY - 10);
+    wheelCtx.lineTo(centerX + radius + 20, centerY + 10);
+    wheelCtx.closePath();
+    wheelCtx.fillStyle = '#ff0000';
+    wheelCtx.fill();
   };
 
-  const addFriend = () => {
-    const newFriendInput = document.getElementById("newFriend");
-    const friendName = newFriendInput.value.trim();
-    if (friendName && !friends.includes(friendName)) {
-      friends.push(friendName);
-      newFriendInput.value = "";
-      updateFriendsList();
-      updateWheel();
+  const updateFriendsFromTextarea = () => {
+    const friendsTextarea = document.getElementById("friendsTextarea");
+    const friendNames = friendsTextarea.value
+      .split('\n')
+      .map(name => name.trim())
+      .filter(name => name !== '');
+    
+    // Clear the current friends list
+    friends.length = 0;
+    
+    // Add unique names only
+    for (const name of friendNames) {
+      if (!friends.includes(name)) {
+        friends.push(name);
+      }
     }
+    
+    updateFriendsList();
+    drawWheel();
   };
 
   const removeFriend = (index) => {
     friends.splice(index, 1);
+    
+    // Update the textarea to reflect the changes
+    const friendsTextarea = document.getElementById("friendsTextarea");
+    friendsTextarea.value = friends.join('\n');
+    
     updateFriendsList();
-    updateWheel();
+    drawWheel();
   };
 
   const updateFriendsList = () => {
@@ -111,38 +153,71 @@ import HistoryList from './HistoryList.astro';
   const spinWheel = () => {
     if (spinning || friends.length === 0) return;
     spinning = true;
-    const wheel = document.getElementById("wheel");
-    wheel.classList.add("spinning");
+    
+    // Cancel any existing animation
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+    }
+    
+    // Random number of full rotations (5-10) plus the random position
     const rand = Math.floor(Math.random() * friends.length);
-    const deg = 360 * 5 + rand * (360 / friends.length);
-    wheel.style.transform = `rotate(${deg}deg)`;
-
-    setTimeout(() => {
-      wheel.classList.remove("spinning");
-      wheel.style.transform = `rotate(${deg % 360}deg)`;
-      showWinner(rand);
-      spinning = false;
-    }, 2000);
+    const angleSlice = (2 * Math.PI) / friends.length;
+    const targetAngle = rotationAngle + (2 * Math.PI * 5) + (rand * angleSlice);
+    const startAngle = rotationAngle;
+    const spinDuration = 3000; // 3 seconds
+    const startTime = performance.now();
+    
+    const animateSpin = (currentTime) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / spinDuration, 1);
+      
+      // Easing function for smoother deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      
+      rotationAngle = startAngle + (targetAngle - startAngle) * easeOut;
+      drawWheel();
+      
+      if (progress < 1) {
+        animationId = requestAnimationFrame(animateSpin);
+      } else {
+        // Normalize rotation angle
+        rotationAngle = rotationAngle % (2 * Math.PI);
+        drawWheel();
+        showWinner(rand);
+        spinning = false;
+        
+        // Trigger confetti
+        if (confetti) {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        }
+      }
+    };
+    
+    animationId = requestAnimationFrame(animateSpin);
   };
 
-  // const showWinner = (winnerIndex) => {
-  //   const winnerName = friends[winnerIndex];
-  //   displayWinnerName(winnerName);
-  //   processWinner(winnerIndex);
-  // };
+  const showWinner = (winnerIndex) => {
+    const winnerName = friends[winnerIndex];
+    displayWinnerName(winnerName);
+    processWinner(winnerIndex);
+  };
 
-  // const displayWinnerName = (name) => {
-  //   const nameDisplay = document.getElementById("nameDisplay");
-  //   const pastelColor = getRandomPastelColor();
-  //   nameDisplay.style.backgroundColor = pastelColor;
-  //   nameDisplay.textContent = name;
-  //   nameDisplay.classList.remove("opacity-0");
-  //   nameDisplay.classList.add("opacity-100");
-  //   setTimeout(() => {
-  //     nameDisplay.classList.remove("opacity-100");
-  //     nameDisplay.classList.add("opacity-0");
-  //   }, 1500);
-  // };
+  const displayWinnerName = (name) => {
+    const nameDisplay = document.getElementById("nameDisplay");
+    const pastelColor = getRandomPastelColor();
+    nameDisplay.style.backgroundColor = pastelColor;
+    nameDisplay.textContent = name;
+    nameDisplay.classList.remove("opacity-0");
+    nameDisplay.classList.add("opacity-100");
+    setTimeout(() => {
+      nameDisplay.classList.remove("opacity-100");
+      nameDisplay.classList.add("opacity-0");
+    }, 1500);
+  };
 
   const processWinner = (index) => {
     const name = friends[index];
@@ -151,7 +226,7 @@ import HistoryList from './HistoryList.astro';
       currentGifter = name;
       friends.splice(index, 1);
       updateFriendsList();
-      updateWheel();
+      drawWheel();
     } else {
       const receiverName = name;
       giftHistory.push({ gifter: currentGifter, receiver: receiverName });
@@ -165,7 +240,7 @@ import HistoryList from './HistoryList.astro';
         currentGifter = receiverName;
       }
       updateFriendsList();
-      updateWheel();
+      drawWheel();
 
       setTimeout(() => {
         const nameDisplay = document.getElementById("nameDisplay");
@@ -195,14 +270,31 @@ import HistoryList from './HistoryList.astro';
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Initialize canvas
+    const wheelContainer = document.getElementById("wheel");
+    if (wheelContainer) {
+      // Replace the wheel div with a canvas element
+      wheelCanvas = document.createElement("canvas");
+      wheelCanvas.id = "wheelCanvas";
+      wheelCanvas.width = 300;
+      wheelCanvas.height = 300;
+      wheelCanvas.classList.add("mx-auto");
+      
+      // Replace the original wheel element with our canvas
+      wheelContainer.parentNode.replaceChild(wheelCanvas, wheelContainer);
+      
+      // Get the drawing context
+      wheelCtx = wheelCanvas.getContext("2d");
+      
+      // Initial draw
+      drawWheel();
+    }
+    
     document.getElementById("spinButton").addEventListener("click", spinWheel);
-    document.getElementById("addFriendButton").addEventListener("click", addFriend);
-
-    document.getElementById("newFriend").addEventListener("keydown", (event) => {
-      if (event.key === "Enter") addFriend();
-    });
-
+    
+    // Add event listener for textarea
+    document.getElementById("friendsTextarea").addEventListener("input", updateFriendsFromTextarea);
+    
     updateFriendsList();
-    updateWheel();
   });
 </script>
