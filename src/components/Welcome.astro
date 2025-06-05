@@ -1,7 +1,7 @@
 <div class="container">
 	<div class="left-panel">
 		<div class="wheel-container" id="wheel"></div>
-		<button class="spinner-button" onclick="spinWheel()">
+		<button class="spinner-button" id="spinButton">
 			Spin the Wheel
 		</button>
 		<div class="name-display" id="nameDisplay">
@@ -19,9 +19,9 @@
 					class="add-friend-input"
 					placeholder="Enter friend's name"
 				/>
-                                <button class="add-friend-button" onclick="addFriend()">
-                                        Add
-                                </button>
+                <button class="add-friend-button" id="addFriendButton">
+                    Add
+                </button>
 			</div>
 			<ul id="friendsList"></ul>
 		</div>
@@ -348,12 +348,16 @@
     return `hsl(${h},${s},${l})`;
   }
 
-  document
-    .getElementById("newFriend")
-    .addEventListener("keydown", function (event) {
+  document.addEventListener('DOMContentLoaded', () => {
+    // Add event listeners
+    document.getElementById("spinButton").addEventListener("click", spinWheel);
+    document.getElementById("addFriendButton").addEventListener("click", addFriend);
+    
+    document.getElementById("newFriend").addEventListener("keydown", function (event) {
       if (event.key === "Enter") addFriend();
     });
 
-  updateFriendsList();
-  updateWheel();
+    updateFriendsList();
+    updateWheel();
+  });
 </script>
