@@ -1,16 +1,51 @@
 ---
 ---
-<div class="flex-1 p-5 bg-white flex flex-col items-center justify-center">
-  <div class="w-full">
-    <div class="relative mb-5">
-      <div id="wheel" class="w-[300px] h-[300px] mx-auto relative">
+<div class="flex-1 rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+  <div class="w-full space-y-5">
+    <div class="relative">
+      <div id="wheel" class="mx-auto aspect-square w-full max-w-[480px] rounded-full bg-slate-50">
         <!-- Canvas will replace this element -->
       </div>
-      <div id="nameDisplay" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white px-4 py-2 rounded-lg text-xl font-bold transition-opacity duration-300 opacity-0"></div>
+      <div
+        id="nameDisplay"
+        role="status"
+        aria-live="polite"
+        class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-5 py-3 text-center text-xl font-bold text-slate-800 shadow-md transition-opacity duration-300 opacity-0"
+      ></div>
     </div>
-    <div class="w-full">
-      <label for="friendsTextarea" class="block text-sm font-medium text-gray-700 mb-1">Add Friends (one per line):</label>
-      <textarea id="friendsTextarea" class="w-full h-24 border border-gray-300 rounded px-3 py-2 mb-3" placeholder="Enter names here..."></textarea>
+
+    <div class="rounded-[1.5rem] bg-slate-50 p-4">
+      <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Participants</h2>
+          <p class="text-sm text-slate-500">One name per line. Editing the list resets the current draw.</p>
+        </div>
+        <button
+          id="resetButton"
+          type="button"
+          class="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-400 hover:bg-white"
+        >
+          Reset Draw
+        </button>
+      </div>
+
+      <label for="friendsTextarea" class="mb-1 block text-sm font-medium text-slate-700">Names</label>
+      <textarea
+        id="friendsTextarea"
+        class="h-32 w-full rounded-2xl border border-slate-300 px-3 py-2 text-slate-800 shadow-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+        placeholder="Alice&#10;Bob&#10;Charlie"
+      ></textarea>
+
+      <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          id="spinButton"
+          type="button"
+          class="rounded-full bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+        >
+          Spin the Wheel
+        </button>
+        <p id="statusMessage" class="text-sm text-slate-600" role="status" aria-live="polite"></p>
+      </div>
     </div>
   </div>
 </div>

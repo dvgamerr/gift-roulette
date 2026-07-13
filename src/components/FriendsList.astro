@@ -1,12 +1,11 @@
-<div class="mb-6">
-  <h2 class="mt-0">Friends</h2>
-  <div class="mb-4">
-    <textarea 
-      id="friendsTextarea" 
-      placeholder="Enter friends' names (one per line)" 
-      class="w-full px-2 py-2 border border-gray-300 rounded" 
-      rows="5"
-    ></textarea>
+<div class="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-slate-200">
+  <div class="mb-4 flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">Names on the Wheel</h2>
+      <p class="text-sm text-slate-500">Removing a name also resets the current draw.</p>
+    </div>
+    <span id="friendsCount" class="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">0</span>
   </div>
-  <ul id="friendsList"></ul>
+  <p id="friendsEmptyState" class="text-sm text-slate-500">Add at least 2 unique names to start.</p>
+  <ul id="friendsList" class="space-y-2"></ul>
 </div>

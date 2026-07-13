@@ -4,45 +4,107 @@ import FriendsList from './FriendsList.astro';
 import HistoryList from './HistoryList.astro';
 ---
 <div class="flex flex-col md:flex-row w-full">
-  <div class="md:w-2/3 p-4">
+  <div class="p-4 md:w-2/3">
     <WheelSection />
-    <div id="nameDisplay" class="mt-4 text-center text-2xl font-bold p-4 rounded-lg transition-opacity duration-500 opacity-0">
-      <!-- Winner name will appear here -->
-    </div>
   </div>
-  
-  <div class="md:w-1/3 p-4">
+
+  <div class="space-y-6 p-4 md:w-1/3">
+    <FriendsList />
     <HistoryList />
   </div>
 </div>
 
-<style>
-@keyframes spin {
-  from {transform: rotate(0deg);}
-  to {transform: rotate(360deg);}
-}
-.spinning {
-  animation: spin 2s ease-out;
-}
-</style>
-
 <script>
-  // Import canvas-confetti using dynamic import
-  let confetti;
-  import('canvas-confetti').then(module => {
-    confetti = module.default;
-  });
+  import {
+    createExchangeState,
+    getSpinTargetAngle,
+    parseParticipants,
+    selectParticipant
+  } from '../lib/giftExchange';
 
-  const friends = ["A","B","C", "D","E","F","G"];
-  const giftHistory = [];
+  const DEFAULT_PARTICIPANTS = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+  const WHEEL_MAX_SIZE = 480;
+  const POINTER_LENGTH = 20;
+  const WHEEL_EDGE_GAP = 4;
+  const NAME_DISPLAY_VISIBLE_CLASS = 'opacity-100';
+  const NAME_DISPLAY_HIDDEN_CLASS = 'opacity-0';
+
+  let confetti:
+    | ((options: {
+        origin: { y: number };
+        particleCount: number;
+        spread: number;
+      }) => void)
+    | undefined;
+
+  void import('canvas-confetti')
+    .then((module) => {
+      confetti = module.default;
+    })
+    .catch(() => undefined);
+
+  let participants = [...DEFAULT_PARTICIPANTS];
+  let exchangeState = createExchangeState(DEFAULT_PARTICIPANTS);
   let spinning = false;
-  let firstGifter = null;
-  let currentGifter = null;
-  let wheelCanvas, wheelCtx;
+  let wheelCanvas: HTMLCanvasElement | null = null;
+  let wheelCtx: CanvasRenderingContext2D | null = null;
   let rotationAngle = 0;
-  let animationId = null;
+  let animationId: number | null = null;
+  let winnerDisplayTimeoutId: number | null = null;
+  let resizeObserver: ResizeObserver | null = null;
 
-  // Generate pastel colors for the wheel
+  const getAvailableFriends = () => exchangeState.availableParticipants;
+
+  const getFriendsTextarea = (): HTMLTextAreaElement | null => {
+    const element = document.getElementById('friendsTextarea');
+    return element instanceof HTMLTextAreaElement ? element : null;
+  };
+
+  const getFriendsList = (): HTMLUListElement | null => {
+    const element = document.getElementById('friendsList');
+    return element instanceof HTMLUListElement ? element : null;
+  };
+
+  const getFriendsCount = (): HTMLSpanElement | null => {
+    const element = document.getElementById('friendsCount');
+    return element instanceof HTMLSpanElement ? element : null;
+  };
+
+  const getFriendsEmptyState = (): HTMLParagraphElement | null => {
+    const element = document.getElementById('friendsEmptyState');
+    return element instanceof HTMLParagraphElement ? element : null;
+  };
+
+  const getGiftHistoryList = (): HTMLUListElement | null => {
+    const element = document.getElementById('giftHistory');
+    return element instanceof HTMLUListElement ? element : null;
+  };
+
+  const getGiftHistoryEmptyState = (): HTMLParagraphElement | null => {
+    const element = document.getElementById('historyEmptyState');
+    return element instanceof HTMLParagraphElement ? element : null;
+  };
+
+  const getNameDisplay = (): HTMLDivElement | null => {
+    const element = document.getElementById('nameDisplay');
+    return element instanceof HTMLDivElement ? element : null;
+  };
+
+  const getSpinButton = (): HTMLButtonElement | null => {
+    const element = document.getElementById('spinButton');
+    return element instanceof HTMLButtonElement ? element : null;
+  };
+
+  const getResetButton = (): HTMLButtonElement | null => {
+    const element = document.getElementById('resetButton');
+    return element instanceof HTMLButtonElement ? element : null;
+  };
+
+  const getStatusMessage = (): HTMLParagraphElement | null => {
+    const element = document.getElementById('statusMessage');
+    return element instanceof HTMLParagraphElement ? element : null;
+  };
+
   const generatePastelColors = (count: number) => {
     const colors: string[] = [];
     for (let i = 0; i < count; i++) {
@@ -52,64 +114,100 @@ import HistoryList from './HistoryList.astro';
     return colors;
   };
 
-  // Colors will be generated dynamically based on number of friends
   let colors: string[] = [];
 
-  const drawWheel = () => {
-    if (!wheelCanvas) return;
-    
-    const numSegments = friends.length;
-    if (numSegments === 0) return;
-    
-    // Regenerate colors when needed
-    if (colors.length !== numSegments) {
-      colors = generatePastelColors(numSegments);
+  const getWheelMessage = () => {
+    if (exchangeState.history.length > 0 && getAvailableFriends().length === 0) {
+      return 'Draw complete';
     }
-    
+
+    if (participants.length < 2) {
+      return 'Add 2+ names';
+    }
+
+    return 'Ready to spin';
+  };
+
+  const drawEmptyWheelState = (message: string) => {
+    if (!wheelCanvas || !wheelCtx) return;
+
     const centerX = wheelCanvas.width / 2;
     const centerY = wheelCanvas.height / 2;
     const radius = Math.min(centerX, centerY) - 10;
+
+    wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+    wheelCtx.beginPath();
+    wheelCtx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+    wheelCtx.fillStyle = '#f8fafc';
+    wheelCtx.fill();
+    wheelCtx.strokeStyle = '#cbd5e1';
+    wheelCtx.lineWidth = 2;
+    wheelCtx.setLineDash([8, 10]);
+    wheelCtx.stroke();
+    wheelCtx.setLineDash([]);
+
+    wheelCtx.fillStyle = '#64748b';
+    wheelCtx.font = '600 18px Arial';
+    wheelCtx.textAlign = 'center';
+    wheelCtx.textBaseline = 'middle';
+    wheelCtx.fillText(message, centerX, centerY);
+  };
+
+  const drawWheel = () => {
+    if (!wheelCanvas || !wheelCtx) return;
+
+    const availableFriends = getAvailableFriends();
+    const numSegments = availableFriends.length;
+    if (numSegments === 0) {
+      drawEmptyWheelState(getWheelMessage());
+      return;
+    }
+
+    if (colors.length !== numSegments) {
+      colors = generatePastelColors(numSegments);
+    }
+
+    const centerX = wheelCanvas.width / 2;
+    const centerY = wheelCanvas.height / 2;
+    const radius = Math.min(centerX, centerY) - POINTER_LENGTH - WHEEL_EDGE_GAP;
     const angleSlice = (2 * Math.PI) / numSegments;
 
-    // Clear canvas
     wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
-    
-    // Draw wheel background
     wheelCtx.save();
     wheelCtx.translate(centerX, centerY);
     wheelCtx.rotate(rotationAngle);
-    
-    // Draw segments
+
     for (let i = 0; i < numSegments; i++) {
+      const color = colors[i];
+      const friend = availableFriends[i];
+      if (color === undefined || friend === undefined) continue;
+
       const startAngle = i * angleSlice;
       const endAngle = (i + 1) * angleSlice;
-      
-      // Draw segment
+
       wheelCtx.beginPath();
       wheelCtx.moveTo(0, 0);
       wheelCtx.arc(0, 0, radius, startAngle, endAngle);
       wheelCtx.closePath();
-      wheelCtx.fillStyle = colors[i];
+      wheelCtx.fillStyle = color;
       wheelCtx.fill();
       wheelCtx.strokeStyle = '#ffffff';
       wheelCtx.lineWidth = 2;
       wheelCtx.stroke();
-      
-      // Draw name
+
       wheelCtx.save();
       wheelCtx.rotate(startAngle + angleSlice / 2);
       wheelCtx.textAlign = 'right';
       wheelCtx.fillStyle = '#333333';
       wheelCtx.font = 'bold 16px Arial';
-      wheelCtx.fillText(friends[i], radius - 20, 5);
+      wheelCtx.fillText(friend, radius - 20, 5);
       wheelCtx.restore();
     }
-    
-    // Draw center circle with gradient
+
     const gradient = wheelCtx.createRadialGradient(0, 0, 0, 0, 0, 20);
     gradient.addColorStop(0, '#ffffff');
     gradient.addColorStop(1, '#f0f0f0');
-    
+
     wheelCtx.beginPath();
     wheelCtx.arc(0, 0, 20, 0, 2 * Math.PI);
     wheelCtx.fillStyle = gradient;
@@ -117,10 +215,9 @@ import HistoryList from './HistoryList.astro';
     wheelCtx.strokeStyle = '#cccccc';
     wheelCtx.lineWidth = 1;
     wheelCtx.stroke();
-    
+
     wheelCtx.restore();
-    
-    // Draw pointer
+
     wheelCtx.beginPath();
     wheelCtx.moveTo(centerX + radius, centerY);
     wheelCtx.lineTo(centerX + radius + 20, centerY - 10);
@@ -130,104 +227,210 @@ import HistoryList from './HistoryList.astro';
     wheelCtx.fill();
   };
 
-  const updateFriendsFromTextarea = () => {
-    const friendsTextarea = document.getElementById("friendsTextarea");
-    const friendNames = friendsTextarea.value
-      .split('\n')
-      .map(name => name.trim())
-      .filter(name => name !== '');
-    
-    // Clear the current friends list
-    friends.length = 0;
-    
-    // Add unique names only
-    for (const name of friendNames) {
-      if (!friends.includes(name)) {
-        friends.push(name);
-      }
-    }
-    
-    updateFriendsList();
-    drawWheel();
-  };
+  const syncParticipantsTextarea = () => {
+    const friendsTextarea = getFriendsTextarea();
+    if (!friendsTextarea) return;
 
-  const removeFriend = (index) => {
-    friends.splice(index, 1);
-    
-    // Update the textarea to reflect the changes
-    const friendsTextarea = document.getElementById("friendsTextarea");
-    friendsTextarea.value = friends.join('\n');
-    
-    updateFriendsList();
-    drawWheel();
+    friendsTextarea.value = participants.join('\n');
   };
 
   const updateFriendsList = () => {
-    const friendsList = document.getElementById("friendsList");
-    if (!friendsList) return; // Add null check to prevent error
-    
-    friendsList.innerHTML = "";
-    
-    for (const [index, friend] of friends.entries()) {
-      const listItem = document.createElement("li");
-      listItem.classList.add("flex", "justify-between", "items-center", "py-1", "border-b", "border-gray-200", "last:border-b-0");
-      listItem.textContent = friend;
-      const removeButton = document.createElement("button");
-      removeButton.classList.add("text-red-600", "text-xs", "ml-2");
-      removeButton.textContent = "x";
-      removeButton.onclick = () => removeFriend(index);
+    const friendsList = getFriendsList();
+    if (!friendsList) return;
+
+    const friendsCount = getFriendsCount();
+    const emptyState = getFriendsEmptyState();
+
+    friendsList.innerHTML = '';
+
+    if (friendsCount) {
+      friendsCount.textContent = String(getAvailableFriends().length);
+    }
+
+    if (emptyState) {
+      emptyState.hidden = getAvailableFriends().length > 0;
+    }
+
+    for (const friend of getAvailableFriends()) {
+      const listItem = document.createElement('li');
+      listItem.className =
+        'flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-700';
+
+      const nameLabel = document.createElement('span');
+      nameLabel.textContent = friend;
+
+      const removeButton = document.createElement('button');
+      removeButton.type = 'button';
+      removeButton.className =
+        'rounded-full border border-rose-200 px-3 py-1 text-xs font-medium text-rose-600 transition hover:bg-rose-50';
+      removeButton.textContent = 'Remove';
+      removeButton.setAttribute('aria-label', `Remove ${friend}`);
+      removeButton.onclick = () => removeParticipant(friend);
+
+      listItem.appendChild(nameLabel);
       listItem.appendChild(removeButton);
       friendsList.appendChild(listItem);
     }
   };
 
+  const updateGiftHistory = () => {
+    const historyList = getGiftHistoryList();
+    if (!historyList) return;
+
+    const emptyState = getGiftHistoryEmptyState();
+    historyList.innerHTML = '';
+
+    if (emptyState) {
+      emptyState.hidden = exchangeState.history.length > 0;
+    }
+
+    for (const item of exchangeState.history) {
+      const historyItem = document.createElement('li');
+      historyItem.className = 'rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-700';
+      historyItem.textContent = `${item.gifter} -> ${item.receiver}`;
+      historyList.appendChild(historyItem);
+    }
+  };
+
+  const clearWinnerDisplay = () => {
+    if (winnerDisplayTimeoutId !== null) {
+      window.clearTimeout(winnerDisplayTimeoutId);
+      winnerDisplayTimeoutId = null;
+    }
+
+    const nameDisplay = getNameDisplay();
+    if (!nameDisplay) return;
+
+    nameDisplay.textContent = '';
+    nameDisplay.style.backgroundColor = '';
+    nameDisplay.classList.remove(NAME_DISPLAY_VISIBLE_CLASS);
+    nameDisplay.classList.add(NAME_DISPLAY_HIDDEN_CLASS);
+  };
+
+  const updateStatus = () => {
+    const statusMessage = getStatusMessage();
+    if (!statusMessage) return;
+
+    if (spinning) {
+      statusMessage.textContent = 'Spinning...';
+      return;
+    }
+
+    if (exchangeState.currentGifter !== null) {
+      statusMessage.textContent = `Current giver: ${exchangeState.currentGifter}. Spin again to choose a receiver.`;
+      return;
+    }
+
+    if (exchangeState.history.length > 0 && getAvailableFriends().length === 0) {
+      statusMessage.textContent = 'Exchange complete. Reset the draw or edit the list to start over.';
+      return;
+    }
+
+    if (participants.length < 2) {
+      statusMessage.textContent = 'Add at least 2 unique names to begin.';
+      return;
+    }
+
+    statusMessage.textContent = 'Click the wheel or use the button to choose the first giver.';
+  };
+
+  const canSpin = () => {
+    if (spinning) return false;
+    return exchangeState.currentGifter === null
+      ? getAvailableFriends().length >= 2
+      : getAvailableFriends().length >= 1;
+  };
+
+  const updateControls = () => {
+    const spinDisabled = !canSpin();
+    const spinButton = getSpinButton();
+    if (spinButton) {
+      spinButton.disabled = spinDisabled;
+    }
+
+    if (wheelCanvas) {
+      wheelCanvas.setAttribute('aria-disabled', String(spinDisabled));
+      wheelCanvas.classList.toggle('cursor-pointer', !spinDisabled);
+      wheelCanvas.classList.toggle('cursor-not-allowed', spinDisabled);
+    }
+  };
+
+  const resetDraw = () => {
+    if (animationId !== null) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+
+    spinning = false;
+    exchangeState = createExchangeState(participants);
+    rotationAngle = 0;
+    colors = [];
+
+    clearWinnerDisplay();
+    updateFriendsList();
+    updateGiftHistory();
+    drawWheel();
+    updateStatus();
+    updateControls();
+  };
+
+  const updateParticipantsFromTextarea = () => {
+    const friendsTextarea = getFriendsTextarea();
+    if (!friendsTextarea) return;
+
+    participants = parseParticipants(friendsTextarea.value);
+    resetDraw();
+  };
+
+  const removeParticipant = (name: string) => {
+    participants = participants.filter((participant) => participant !== name);
+    syncParticipantsTextarea();
+    resetDraw();
+  };
+
   const spinWheel = () => {
-    if (spinning || friends.length === 0) return;
+    if (!canSpin()) return;
+
     spinning = true;
-    
-    // Cancel any existing animation
-    if (animationId) {
+
+    if (animationId !== null) {
       cancelAnimationFrame(animationId);
     }
-    
-    // Random number of full rotations (5-10) plus the random position
-    const rand = Math.floor(Math.random() * friends.length);
-    const angleSlice = (2 * Math.PI) / friends.length;
-    
-    // Calculate target rotation so the selected segment is aligned with the pointer (at 0 degrees)
-    // The pointer is at the 3 o'clock position (0 degrees in the unit circle)
-    // We need to add 90 degrees (π/2) to align with the pointer
-    const targetRotation = -((rand * angleSlice) + (angleSlice / 2)) + Math.PI/2;
-    
-    // Add multiple full rotations for spinning effect
-    const totalRotations = 5 + Math.random() * 5; // Random between 5-10 rotations
-    const targetAngle = rotationAngle - (2 * Math.PI * totalRotations) + targetRotation;
-    
+
+    updateStatus();
+    updateControls();
+
+    const winnerIndex = Math.floor(Math.random() * getAvailableFriends().length);
+    const totalRotations = 5 + Math.floor(Math.random() * 5);
+    const targetAngle = getSpinTargetAngle(
+      rotationAngle,
+      winnerIndex,
+      getAvailableFriends().length,
+      totalRotations
+    );
     const startAngle = rotationAngle;
-    const spinDuration = 4000; // 4 seconds
+    const spinDuration = 4000;
     const startTime = performance.now();
 
-    console.log({rand,angleSlice, targetRotation,totalRotations,targetAngle,startAngle,spinDuration,startTime})
-    const animateSpin = (currentTime) => {
+    const animateSpin = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / spinDuration, 1);
-      
-      // Easing function for smoother deceleration
-      const easeOut = 1 - Math.pow(1 - progress, 4); // Changed power to 4 for more dramatic slowdown
-      
+      const easeOut = 1 - Math.pow(1 - progress, 4);
+
       rotationAngle = startAngle + (targetAngle - startAngle) * easeOut;
       drawWheel();
-      
+
       if (progress < 1) {
         animationId = requestAnimationFrame(animateSpin);
       } else {
-        // Normalize rotation angle
         rotationAngle = rotationAngle % (2 * Math.PI);
+        animationId = null;
         drawWheel();
-        showWinner(rand);
+        showWinner(winnerIndex);
         spinning = false;
-        
-        // Trigger confetti
+        updateStatus();
+        updateControls();
+
         if (confetti) {
           confetti({
             particleCount: 100,
@@ -241,68 +444,40 @@ import HistoryList from './HistoryList.astro';
     animationId = requestAnimationFrame(animateSpin);
   };
 
-  const showWinner = (winnerIndex) => {
-    const winnerName = friends[winnerIndex];
+  const showWinner = (winnerIndex: number) => {
+    const winnerName = getAvailableFriends()[winnerIndex];
+    if (!winnerName) return;
+
     displayWinnerName(winnerName);
     processWinner(winnerIndex);
   };
 
-  const displayWinnerName = (name) => {
-    const nameDisplay = document.getElementById("nameDisplay");
+  const displayWinnerName = (name: string) => {
+    const nameDisplay = getNameDisplay();
+    if (!nameDisplay) return;
+
     const pastelColor = getRandomPastelColor();
     nameDisplay.style.backgroundColor = pastelColor;
     nameDisplay.textContent = name;
-    nameDisplay.classList.remove("opacity-0");
-    nameDisplay.classList.add("opacity-100");
-    setTimeout(() => {
-      nameDisplay.classList.remove("opacity-100");
-      nameDisplay.classList.add("opacity-0");
+    nameDisplay.classList.remove(NAME_DISPLAY_HIDDEN_CLASS);
+    nameDisplay.classList.add(NAME_DISPLAY_VISIBLE_CLASS);
+
+    winnerDisplayTimeoutId = window.setTimeout(() => {
+      clearWinnerDisplay();
     }, 1500);
   };
 
-  const processWinner = (index) => {
-    const name = friends[index];
-    if (currentGifter === null) {
-      firstGifter = name;
-      currentGifter = name;
-      friends.splice(index, 1);
-      updateFriendsList();
-      drawWheel();
-    } else {
-      const receiverName = name;
-      giftHistory.push({ gifter: currentGifter, receiver: receiverName });
-      updateGiftHistory();
-      friends.splice(index, 1);
-      if (friends.length === 0) {
-        giftHistory.push({ gifter: receiverName, receiver: firstGifter });
-        updateGiftHistory();
-        currentGifter = null;
-      } else {
-        currentGifter = receiverName;
-      }
-      updateFriendsList();
-      drawWheel();
+  const processWinner = (index: number) => {
+    const name = getAvailableFriends()[index];
+    if (!name) return;
 
-      setTimeout(() => {
-        const nameDisplay = document.getElementById("nameDisplay");
-        nameDisplay.textContent = "";
-        nameDisplay.style.backgroundColor = "";
-      }, 2000);
-    }
-  };
+    exchangeState = selectParticipant(exchangeState, index);
 
-  const updateGiftHistory = () => {
-    const historyList = document.getElementById("giftHistory");
-    if (!historyList) return; // Add null check to prevent error
-    
-    historyList.innerHTML = "";
-    
-    for (const item of giftHistory) {
-      const historyItem = document.createElement("li");
-      historyItem.classList.add("py-1", "border-b", "border-gray-200", "last:border-b-0");
-      historyItem.textContent = `${item.gifter} gave to ${item.receiver}`;
-      historyList.appendChild(historyItem);
-    }
+    updateFriendsList();
+    updateGiftHistory();
+    drawWheel();
+    updateStatus();
+    updateControls();
   };
 
   const getRandomPastelColor = () => {
@@ -312,41 +487,96 @@ import HistoryList from './HistoryList.astro';
     return `hsl(${h},${s},${l})`;
   };
 
-  document.addEventListener('DOMContentLoaded', () => {
-    // Initialize canvas
-    const wheelContainer = document.getElementById("wheel");
-    if (wheelContainer) {
-      // Replace the wheel div with a canvas element
-      wheelCanvas = document.createElement("canvas");
-      wheelCanvas.id = "wheelCanvas";
-      wheelCanvas.width = 600;  // Increased from 300 to 600
-      wheelCanvas.height = 600; // Increased from 300 to 600
-      wheelCanvas.classList.add("mx-auto");
-      
-      // Replace the original wheel element with our canvas
-      wheelContainer.parentNode.replaceChild(wheelCanvas, wheelContainer);
-      
-      // Get the drawing context
-      wheelCtx = wheelCanvas.getContext("2d");
-      
-      // Initial draw
+  const mountWheelCanvas = () => {
+    const existingCanvas = document.getElementById('wheelCanvas');
+    if (existingCanvas instanceof HTMLCanvasElement) {
+      wheelCanvas = existingCanvas;
+    } else {
+      const wheelContainer = document.getElementById('wheel');
+      if (!wheelContainer) return false;
+
+      wheelCanvas = document.createElement('canvas');
+      wheelCanvas.id = 'wheelCanvas';
+      wheelCanvas.classList.add(
+        'mx-auto',
+        'block',
+        'focus-visible:outline-none',
+        'focus-visible:ring-4',
+        'focus-visible:ring-slate-300'
+      );
+      wheelCanvas.setAttribute('role', 'button');
+      wheelCanvas.setAttribute('aria-label', 'Spin the gift exchange wheel');
+      wheelCanvas.tabIndex = 0;
+      const wheelParent = wheelContainer.parentNode;
+      if (!wheelParent) return;
+      wheelParent.replaceChild(wheelCanvas, wheelContainer);
+    }
+
+    const canvas = wheelCanvas;
+    if (!canvas.parentElement) return false;
+
+    canvas.onclick = spinWheel;
+    canvas.onkeydown = (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+
+      event.preventDefault();
+      spinWheel();
+    };
+
+    const context = canvas.getContext('2d');
+    if (!context) return false;
+
+    wheelCtx = context;
+
+    const wheelParent = canvas.parentElement;
+    const resizeWheel = () => {
+      const nextSize = Math.min(wheelParent.clientWidth, WHEEL_MAX_SIZE);
+      if (nextSize < 1 || (canvas.width === nextSize && canvas.height === nextSize)) {
+        return;
+      }
+
+      canvas.width = nextSize;
+      canvas.height = nextSize;
+      canvas.style.width = `${nextSize}px`;
+      canvas.style.height = `${nextSize}px`;
       drawWheel();
-      
-      // Make the canvas clickable for spinning
-      wheelCanvas.addEventListener("click", spinWheel);
-    }
-    
-    const spinButton = document.getElementById("spinButton");
+    };
+
+    resizeWheel();
+    resizeObserver?.disconnect();
+    resizeObserver = new ResizeObserver(resizeWheel);
+    resizeObserver.observe(wheelParent);
+    return true;
+  };
+
+  const initializeApp = () => {
+    if (!mountWheelCanvas()) return;
+
+    const spinButton = getSpinButton();
     if (spinButton) {
-      spinButton.addEventListener("click", spinWheel);
+      spinButton.onclick = spinWheel;
     }
-    
-    // Add event listener for textarea
-    const friendsTextarea = document.getElementById("friendsTextarea");
+
+    const resetButton = getResetButton();
+    if (resetButton) {
+      resetButton.onclick = () => {
+        resetDraw();
+        syncParticipantsTextarea();
+      };
+    }
+
+    const friendsTextarea = getFriendsTextarea();
     if (friendsTextarea) {
-      friendsTextarea.addEventListener("input", updateFriendsFromTextarea);
+      friendsTextarea.oninput = updateParticipantsFromTextarea;
     }
-    
-    updateFriendsList();
-  });
+
+    syncParticipantsTextarea();
+    resetDraw();
+  };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp, { once: true });
+  } else {
+    initializeApp();
+  }
 </script>
